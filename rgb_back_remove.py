@@ -7,7 +7,8 @@ def batch_convert_transparent(input_folder, output_folder, target_nodata_value=2
     """
     폴더 내의 모든 TIFF 파일을 찾아 배경을 투명하게(Alpha Channel 추가) 변환하여 저장합니다.
     """
-
+    gdal.UseExceptions()
+    gdal.SetConfigOption('GTIFF_SRS_SOURCE', 'EPSG')
     # 1. 출력 폴더가 없으면 생성
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -25,9 +26,17 @@ def batch_convert_transparent(input_folder, output_folder, target_nodata_value=2
     # 3. 파일별 반복 처리
     for i, input_path in enumerate(tif_files, 1):
         filename = os.path.basename(input_path)
-        output_path = os.path.join(output_folder, filename)
 
-        print(f"[{i}/{len(tif_files)}] 처리 중: {filename}")
+        # --- [수정된 부분] 파일명 분리 및 이름 추가 ---
+        name, ext = os.path.splitext(filename)  # 이름과 확장자 분리
+        new_filename = f"{name}_converted{ext}"  # 예: field_data_modify.tif
+        # ---------------------------------------------
+
+        output_path = os.path.join(output_folder, new_filename)
+
+        print(f"[{i}/{len(tif_files)}] 처리 중: {new_filename}")
+        print(f"   - 원본: {filename}")
+        print(f"   - 타겟: {new_filename}")  # <--- 변경될 이름 확인
 
         try:
             # --- GDAL Translate 옵션 설정 (핵심) ---
@@ -44,8 +53,14 @@ def batch_convert_transparent(input_folder, output_folder, target_nodata_value=2
             # 변환 실행
             gdal.Translate(destName=output_path, srcDS=input_path, options=options)
 
+        except RuntimeError as e:
+
+            # gdal.UseExceptions()를 켰기 때문에 GDAL 오류가 발생하면 이곳으로 옵니다.
+            print(f"   ⚠️ GDAL 오류 발생 ({filename}): {e}")
+
         except Exception as e:
-            print(f"   ⚠️ 오류 발생 ({filename}): {e}")
+
+            print(f"   ⚠️ 일반 오류 발생 ({filename}): {e}")
 
     print("\n✅ 모든 작업이 완료되었습니다!")
     print(f"결과물 위치: {output_folder}")

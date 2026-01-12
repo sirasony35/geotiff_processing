@@ -14,8 +14,8 @@ logging.getLogger('rasterio').setLevel(logging.ERROR)
 # =========================================================
 # [설정 영역]
 # =========================================================
-INPUT_FOLDER = r"D:\회사관련\geotiff_processing\data"
-OUTPUT_FOLDER = r"D:\회사관련\geotiff_processing\png_converted"
+INPUT_FOLDER = r"C:\Users\user\Desktop\분석프로젝트\geotiff_processing\data"
+OUTPUT_FOLDER = r"C:\Users\user\Desktop\분석프로젝트\geotiff_processing\png_converted"
 RESIZE_RATIO = 1.0
 
 

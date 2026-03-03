@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>JSON to CSV 변환기</title>
+    <style>
+        body {
+            font-family: '맑은 고딕', sans-serif;
+            background-color: #f4f7f6;
+            padding: 40px;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h2 { margin-top: 0; color: #2c3e50; }
+        .upload-area {
+            border: 2px dashed #3498db;
+            padding: 40px 20px;
+            text-align: center;
+            border-radius: 6px;
+            background-color: #f9fbff;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .upload-area:hover { background-color: #eaf2f8; }
+        button {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            display: none; /* 파일 분석 전에는 숨김 */
+        }
+        button:hover { background-color: #27ae60; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>JSON ➔ CSV 추출기</h2>
+    <p>JSON 파일을 선택하시면 자동으로 <b>sampleNumber, Comment, Lon, Lat</b> 정보를 추출하여 CSV로 변환합니다.</p>
+
+    <div class="upload-area" id="uploadClick">
+        <p>📥 이곳을 클릭하여 JSON 파일을 선택하세요.</p>
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+
+    <button id="downloadBtn">CSV 다운로드</button>
+</div>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const uploadClick = document.getElementById('uploadClick');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let csvData = "";
+
+    // 박스를 클릭하면 파일 선택창이 열리도록 연결
+    uploadClick.addEventListener('click', () => fileInput.click());
+
+    // 파일이 선택되었을 때의 동작
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const text = event.target.result;
+            // 올려주신 데이터가 줄바꿈으로 나뉜 JSON이므로 각 줄을 분리
+            const lines = text.split('\n');
+
+            // CSV 헤더 설정
+            csvData = "sampleNumber,Comment,Lon,Lat\n";
+            let validCount = 0;
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (!line) return;
+
+                try {
+                    const parsed = JSON.parse(line);
+                    // 올려주신 JSON 파일 구조가 배열 중첩으로 되어있음 ( [[{"v":{...}}]] )
+                    if (Array.isArray(parsed) && Array.isArray(parsed[0]) && parsed[0][0].v) {
+                        const v = parsed[0][0].v;
+
+                        // 원하는 데이터만 쏙 빼오기
+                        const sampleNumber = v.sampleNumber !== undefined ? v.sampleNumber : "";
+                        const comment = v.Comment || "";
+                        const lon = v.Lon !== undefined ? v.Lon : "";
+                        const lat = v.Lat !== undefined ? v.Lat : "";
+
+                        // 쉼표(,)로 구분하여 CSV 줄 추가
+                        csvData += `${sampleNumber},${comment},${lon},${lat}\n`;
+                        validCount++;
+                    }
+                } catch (error) {
+                    console.error("파싱 오류가 발생한 줄 무시:", error);
+                }
+            });
+
+            if (validCount > 0) {
+                downloadBtn.style.display = 'block';
+                alert(`총 ${validCount}개의 데이터를 성공적으로 추출했습니다. 다운로드 버튼을 눌러주세요.`);
+            } else {
+                alert("추출할 수 있는 데이터가 없습니다. 파일 구조를 확인해주세요.");
+                downloadBtn.style.display = 'none';
+            }
+        };
+        reader.readAsText(file); // 텍스트로 파일 읽기 시작
+    });
+
+    // 다운로드 버튼을 클릭했을 때의 동작
+    downloadBtn.addEventListener('click', function() {
+        // 엑셀에서 열 때 한글(Comment) 깨짐 방지를 위한 BOM 추가
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        const blob = new Blob([bom, csvData], { type: 'text/csv;charset=utf-8;' });
+
+        // 가상의 링크를 만들어 클릭하는 방식으로 파일 다운로드 유도
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "extracted_samples.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+</script>
+
+</body>
+</html>

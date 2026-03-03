@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>JSON to CSV 변환기</title>
+    <title>JSON to CSV 변환기 (날짜 포맷 적용)</title>
     <style>
         body {
             font-family: '맑은 고딕', sans-serif;
@@ -39,7 +39,7 @@
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
-            display: none; /* 파일 분석 전에는 숨김 */
+            display: none;
         }
         button:hover { background-color: #27ae60; }
     </style>
@@ -48,7 +48,7 @@
 
 <div class="container">
     <h2>JSON ➔ CSV 추출기</h2>
-    <p>JSON 파일을 선택하시면 자동으로 <b>sampleNumber, Comment, Lon, Lat</b> 정보를 추출하여 CSV로 변환합니다.</p>
+    <p>JSON 파일을 선택하시면 <b>Comment가 있는 데이터만</b> 필터링하여 토양 성분 빈 컬럼과 함께 CSV로 변환합니다. (Date 항목은 YYYY-MM-DD HH:mm:ss 형식으로 변환됩니다.)</p>
 
     <div class="upload-area" id="uploadClick">
         <p>📥 이곳을 클릭하여 JSON 파일을 선택하세요.</p>
@@ -59,16 +59,22 @@
 </div>
 
 <script>
+    // ===============================================================
+    // 💡 추가하고 싶은 빈 컬럼(토양 성분 등)의 이름을 적어주세요.
+    // ===============================================================
+    const soilColumns = [
+        "Ca", "Clay", "Cond(EC)", "Cu", "Fe", "K", "Mg", "Mn", "OM",
+        "P", "S", "Sand", "Silt", "Zn", "pH", "Si", "Total N"
+    ];
+
     const fileInput = document.getElementById('fileInput');
     const uploadClick = document.getElementById('uploadClick');
     const downloadBtn = document.getElementById('downloadBtn');
 
     let csvData = "";
 
-    // 박스를 클릭하면 파일 선택창이 열리도록 연결
     uploadClick.addEventListener('click', () => fileInput.click());
 
-    // 파일이 선택되었을 때의 동작
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -76,12 +82,17 @@
         const reader = new FileReader();
         reader.onload = function(event) {
             const text = event.target.result;
-            // 올려주신 데이터가 줄바꿈으로 나뉜 JSON이므로 각 줄을 분리
             const lines = text.split('\n');
 
-            // CSV 헤더 설정
-            csvData = "sampleNumber,Comment,Lon,Lat\n";
+            // 1. CSV 헤더 설정 (기본 컬럼에 Date 추가 + 추가 빈 컬럼)
+            let header = "sampleNumber,Comment,Lon,Lat,Date";
+            if (soilColumns.length > 0) {
+                header += "," + soilColumns.join(",");
+            }
+            csvData = header + "\n";
+
             let validCount = 0;
+            let skippedCount = 0;
 
             lines.forEach(line => {
                 line = line.trim();
@@ -89,18 +100,48 @@
 
                 try {
                     const parsed = JSON.parse(line);
-                    // 올려주신 JSON 파일 구조가 배열 중첩으로 되어있음 ( [[{"v":{...}}]] )
                     if (Array.isArray(parsed) && Array.isArray(parsed[0]) && parsed[0][0].v) {
                         const v = parsed[0][0].v;
 
-                        // 원하는 데이터만 쏙 빼오기
+                        // [조건 1] Comment가 빈칸이거나 Null이면 건너뛰기
+                        const comment = v.Comment !== null && v.Comment !== undefined ? String(v.Comment).trim() : "";
+                        if (comment === "") {
+                            skippedCount++;
+                            return; // 현재 줄 패스
+                        }
+
                         const sampleNumber = v.sampleNumber !== undefined ? v.sampleNumber : "";
-                        const comment = v.Comment || "";
                         const lon = v.Lon !== undefined ? v.Lon : "";
                         const lat = v.Lat !== undefined ? v.Lat : "";
 
-                        // 쉼표(,)로 구분하여 CSV 줄 추가
-                        csvData += `${sampleNumber},${comment},${lon},${lat}\n`;
+                        // [조건 2] Date 항목을 YYYY-MM-DD HH:mm:ss 형식으로 변환
+                        let dateStr = "";
+                        if (v.Date) {
+                            // 13자리 밀리초 타임스탬프를 Date 객체로 변환
+                            const d = new Date(v.Date);
+
+                            const yyyy = d.getFullYear();
+                            // 달(Month)은 0부터 시작하므로 1을 더해줍니다. 한자리면 앞에 '0'을 붙입니다.
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const dd = String(d.getDate()).padStart(2, '0');
+
+                            const hh = String(d.getHours()).padStart(2, '0');
+                            const min = String(d.getMinutes()).padStart(2, '0');
+                            const ss = String(d.getSeconds()).padStart(2, '0');
+
+                            // YYYY-MM-DD HH:mm:ss 형태로 조립
+                            dateStr = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+                        }
+
+                        // 2. 기본 데이터 나열
+                        let rowData = `${sampleNumber},${comment},${lon},${lat},${dateStr}`;
+
+                        // 3. 추가 컬럼 개수만큼 쉼표(,)를 찍어서 빈칸 만들기
+                        if (soilColumns.length > 0) {
+                            rowData += ",".repeat(soilColumns.length);
+                        }
+
+                        csvData += rowData + "\n";
                         validCount++;
                     }
                 } catch (error) {
@@ -110,26 +151,23 @@
 
             if (validCount > 0) {
                 downloadBtn.style.display = 'block';
-                alert(`총 ${validCount}개의 데이터를 성공적으로 추출했습니다. 다운로드 버튼을 눌러주세요.`);
+                alert(`총 ${validCount}개의 데이터를 추출했습니다.\n(Comment가 없어 제외된 데이터: ${skippedCount}개)\n\n다운로드 버튼을 눌러주세요.`);
             } else {
-                alert("추출할 수 있는 데이터가 없습니다. 파일 구조를 확인해주세요.");
+                alert("조건에 맞는 데이터(Comment가 존재하는 행)가 없습니다.");
                 downloadBtn.style.display = 'none';
             }
         };
-        reader.readAsText(file); // 텍스트로 파일 읽기 시작
+        reader.readAsText(file);
     });
 
-    // 다운로드 버튼을 클릭했을 때의 동작
     downloadBtn.addEventListener('click', function() {
-        // 엑셀에서 열 때 한글(Comment) 깨짐 방지를 위한 BOM 추가
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
         const blob = new Blob([bom, csvData], { type: 'text/csv;charset=utf-8;' });
 
-        // 가상의 링크를 만들어 클릭하는 방식으로 파일 다운로드 유도
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", "extracted_samples.csv");
+        link.setAttribute("download", "extracted_samples_filtered.csv");
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();

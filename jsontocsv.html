@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>JSON to CSV 변환기 (날짜 포맷 적용)</title>
+    <title>JSON to CSV 변환기 (드래그 앤 드롭 지원)</title>
     <style>
         body {
             font-family: '맑은 고딕', sans-serif;
@@ -27,9 +27,12 @@
             background-color: #f9fbff;
             margin: 20px 0;
             cursor: pointer;
-            transition: background-color 0.3s;
+            transition: background-color 0.3s, border-color 0.3s;
         }
-        .upload-area:hover { background-color: #eaf2f8; }
+        .upload-area:hover, .upload-area.dragover {
+            background-color: #eaf2f8;
+            border-color: #2980b9;
+        }
         button {
             background-color: #2ecc71;
             color: white;
@@ -48,10 +51,10 @@
 
 <div class="container">
     <h2>JSON ➔ CSV 추출기</h2>
-    <p>JSON 파일을 선택하시면 <b>Comment가 있는 데이터만</b> 필터링하여 토양 성분 빈 컬럼과 함께 CSV로 변환합니다. (Date 항목은 YYYY-MM-DD HH:mm:ss 형식으로 변환됩니다.)</p>
+    <p>JSON 파일을 선택하시거나 <b>박스 안으로 드래그</b>하시면 데이터를 추출하여 변환합니다.</p>
 
     <div class="upload-area" id="uploadClick">
-        <p>📥 이곳을 클릭하여 JSON 파일을 선택하세요.</p>
+        <p>📥 이곳을 클릭하거나 <b>JSON 파일을 끌어다 놓으세요.</b></p>
         <input type="file" id="fileInput" accept=".json" style="display: none;">
     </div>
 
@@ -60,36 +63,83 @@
 
 <script>
     // ===============================================================
-    // 💡 추가하고 싶은 빈 컬럼(토양 성분 등)의 이름을 적어주세요.
+    // 💡 토양 성분 컬럼명과 그에 맞는 단위/설명을 적어주세요!
     // ===============================================================
     const soilColumns = [
-        "Ca", "Clay", "Cond(EC)", "Cu", "Fe", "K", "Mg", "Mn", "OM",
-        "P", "S", "Sand", "Silt", "Zn", "pH", "Si", "Total N"
+        { name: "pH", unit: "(1:5)" },
+        { name: "SiO₂", unit: "(mg/kg)" },
+        { name: "OM", unit: "(g/kg)" },
+        { name: "EC", unit: "(dS/m)" },
+        { name: "P2O5", unit: "(mg/kg)" },
+        { name: "K", unit: "(cmolc/kg)" },
+        { name: "Ca", unit: "(cmolc/kg)" },
+        { name: "Mg", unit: "(cmolc/kg)" },
+        { name: "Total-N", unit: "(%)" },
+        { name: "Soil texture", unit: "Soil texture" },
+        { name: "CEC", unit: "(cmolc/kg)" }
     ];
 
     const fileInput = document.getElementById('fileInput');
-    const uploadClick = document.getElementById('uploadClick');
+    const uploadArea = document.getElementById('uploadClick');
     const downloadBtn = document.getElementById('downloadBtn');
 
     let csvData = "";
 
-    uploadClick.addEventListener('click', () => fileInput.click());
-
+    // 1. 클릭으로 파일 선택 시
+    uploadArea.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+        if (e.target.files.length > 0) {
+            processFile(e.target.files[0]);
+        }
+    });
 
+    // 2. 드래그 앤 드롭 이벤트 처리
+    // 드래그해서 영역 위로 올라왔을 때 (시각적 효과 추가)
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault(); // 브라우저가 파일을 자체적으로 열어버리는 기본 동작 방지
+        uploadArea.classList.add('dragover');
+    });
+
+    // 드래그하던 파일이 영역 밖으로 나갔을 때 (시각적 효과 제거)
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+    });
+
+    // 파일을 영역에 떨어뜨렸을 때
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            // 확장자가 JSON인지 간단히 확인
+            if (file.name.toLowerCase().endsWith('.json')) {
+                processFile(file);
+            } else {
+                alert("JSON 파일만 업로드 가능합니다.");
+            }
+        }
+    });
+
+    // 실제 파일을 읽고 CSV로 파싱하는 함수
+    function processFile(file) {
         const reader = new FileReader();
         reader.onload = function(event) {
             const text = event.target.result;
             const lines = text.split('\n');
 
-            // 1. CSV 헤더 설정 (기본 컬럼에 Date 추가 + 추가 빈 컬럼)
-            let header = "sampleNumber,Comment,Lon,Lat,Date";
+            // CSV 헤더 1번째 줄 (단위/설명)
+            let header1 = ",,,,";
+            // CSV 헤더 2번째 줄 (실제 컬럼명)
+            let header2 = "sampleNumber,Comment,Lon,Lat,Date";
+
             if (soilColumns.length > 0) {
-                header += "," + soilColumns.join(",");
+                header1 += "," + soilColumns.map(col => col.unit).join(",");
+                header2 += "," + soilColumns.map(col => col.name).join(",");
             }
-            csvData = header + "\n";
+
+            csvData = header1 + "\n" + header2 + "\n";
 
             let validCount = 0;
             let skippedCount = 0;
@@ -103,40 +153,32 @@
                     if (Array.isArray(parsed) && Array.isArray(parsed[0]) && parsed[0][0].v) {
                         const v = parsed[0][0].v;
 
-                        // [조건 1] Comment가 빈칸이거나 Null이면 건너뛰기
+                        // [조건 1] Comment 필터링
                         const comment = v.Comment !== null && v.Comment !== undefined ? String(v.Comment).trim() : "";
                         if (comment === "") {
                             skippedCount++;
-                            return; // 현재 줄 패스
+                            return;
                         }
 
                         const sampleNumber = v.sampleNumber !== undefined ? v.sampleNumber : "";
                         const lon = v.Lon !== undefined ? v.Lon : "";
                         const lat = v.Lat !== undefined ? v.Lat : "";
 
-                        // [조건 2] Date 항목을 YYYY-MM-DD HH:mm:ss 형식으로 변환
+                        // [조건 2] Date 포맷 변환
                         let dateStr = "";
                         if (v.Date) {
-                            // 13자리 밀리초 타임스탬프를 Date 객체로 변환
                             const d = new Date(v.Date);
-
                             const yyyy = d.getFullYear();
-                            // 달(Month)은 0부터 시작하므로 1을 더해줍니다. 한자리면 앞에 '0'을 붙입니다.
                             const mm = String(d.getMonth() + 1).padStart(2, '0');
                             const dd = String(d.getDate()).padStart(2, '0');
-
                             const hh = String(d.getHours()).padStart(2, '0');
                             const min = String(d.getMinutes()).padStart(2, '0');
                             const ss = String(d.getSeconds()).padStart(2, '0');
-
-                            // YYYY-MM-DD HH:mm:ss 형태로 조립
                             dateStr = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
                         }
 
-                        // 2. 기본 데이터 나열
                         let rowData = `${sampleNumber},${comment},${lon},${lat},${dateStr}`;
 
-                        // 3. 추가 컬럼 개수만큼 쉼표(,)를 찍어서 빈칸 만들기
                         if (soilColumns.length > 0) {
                             rowData += ",".repeat(soilColumns.length);
                         }
@@ -151,15 +193,18 @@
 
             if (validCount > 0) {
                 downloadBtn.style.display = 'block';
-                alert(`총 ${validCount}개의 데이터를 추출했습니다.\n(Comment가 없어 제외된 데이터: ${skippedCount}개)\n\n다운로드 버튼을 눌러주세요.`);
+                // 파일명을 표시해서 업로드된 느낌을 명확히 줍니다.
+                document.querySelector('#uploadClick p').innerHTML = `<b>${file.name}</b> 처리 완료! <br>아래 버튼을 눌러주세요.`;
             } else {
                 alert("조건에 맞는 데이터(Comment가 존재하는 행)가 없습니다.");
                 downloadBtn.style.display = 'none';
+                document.querySelector('#uploadClick p').innerHTML = `📥 이곳을 클릭하거나 <b>JSON 파일을 끌어다 놓으세요.</b>`;
             }
         };
         reader.readAsText(file);
-    });
+    }
 
+    // 다운로드 버튼
     downloadBtn.addEventListener('click', function() {
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
         const blob = new Blob([bom, csvData], { type: 'text/csv;charset=utf-8;' });
@@ -167,7 +212,7 @@
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", "extracted_samples_filtered.csv");
+        link.setAttribute("download", "extracted_samples_final.csv");
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();

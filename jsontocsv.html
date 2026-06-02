@@ -66,17 +66,15 @@
     // 💡 토양 성분 컬럼명과 그에 맞는 단위/설명을 적어주세요!
     // ===============================================================
     const soilColumns = [
-        { name: "pH", unit: "(1:5)" },
-        { name: "SiO₂", unit: "(mg/kg)" },
+        { name: "pH", unit: "(1:5 H2O)" },
         { name: "OM", unit: "(g/kg)" },
-        { name: "EC", unit: "(dS/m)" },
-        { name: "P2O5", unit: "(mg/kg)" },
+        { name: "P", unit: "(mg/kg)" },
         { name: "K", unit: "(cmolc/kg)" },
         { name: "Ca", unit: "(cmolc/kg)" },
         { name: "Mg", unit: "(cmolc/kg)" },
-        { name: "Total-N", unit: "(%)" },
-        { name: "Soil texture", unit: "Soil texture" },
-        { name: "CEC", unit: "(cmolc/kg)" }
+        { name: "Sand", unit: "(%)" },
+        { name: "Silt", unit: "(%)" },
+        { name: "Clay", unit: "(%)" }
     ];
 
     const fileInput = document.getElementById('fileInput');
@@ -94,26 +92,22 @@
     });
 
     // 2. 드래그 앤 드롭 이벤트 처리
-    // 드래그해서 영역 위로 올라왔을 때 (시각적 효과 추가)
     uploadArea.addEventListener('dragover', function(e) {
-        e.preventDefault(); // 브라우저가 파일을 자체적으로 열어버리는 기본 동작 방지
+        e.preventDefault();
         uploadArea.classList.add('dragover');
     });
 
-    // 드래그하던 파일이 영역 밖으로 나갔을 때 (시각적 효과 제거)
     uploadArea.addEventListener('dragleave', function(e) {
         e.preventDefault();
         uploadArea.classList.remove('dragover');
     });
 
-    // 파일을 영역에 떨어뜨렸을 때
     uploadArea.addEventListener('drop', function(e) {
         e.preventDefault();
         uploadArea.classList.remove('dragover');
 
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const file = e.dataTransfer.files[0];
-            // 확장자가 JSON인지 간단히 확인
             if (file.name.toLowerCase().endsWith('.json')) {
                 processFile(file);
             } else {
@@ -142,7 +136,6 @@
             csvData = header1 + "\n" + header2 + "\n";
 
             let validCount = 0;
-            let skippedCount = 0;
 
             lines.forEach(line => {
                 line = line.trim();
@@ -153,12 +146,8 @@
                     if (Array.isArray(parsed) && Array.isArray(parsed[0]) && parsed[0][0].v) {
                         const v = parsed[0][0].v;
 
-                        // [조건 1] Comment 필터링
+                        // [수정됨] Comment 필터링 로직 제거: 공란이어도 그대로 진행
                         const comment = v.Comment !== null && v.Comment !== undefined ? String(v.Comment).trim() : "";
-                        if (comment === "") {
-                            skippedCount++;
-                            return;
-                        }
 
                         const sampleNumber = v.sampleNumber !== undefined ? v.sampleNumber : "";
                         const lon = v.Lon !== undefined ? v.Lon : "";
@@ -193,10 +182,9 @@
 
             if (validCount > 0) {
                 downloadBtn.style.display = 'block';
-                // 파일명을 표시해서 업로드된 느낌을 명확히 줍니다.
                 document.querySelector('#uploadClick p').innerHTML = `<b>${file.name}</b> 처리 완료! <br>아래 버튼을 눌러주세요.`;
             } else {
-                alert("조건에 맞는 데이터(Comment가 존재하는 행)가 없습니다.");
+                alert("추출 가능한 데이터가 없습니다.");
                 downloadBtn.style.display = 'none';
                 document.querySelector('#uploadClick p').innerHTML = `📥 이곳을 클릭하거나 <b>JSON 파일을 끌어다 놓으세요.</b>`;
             }

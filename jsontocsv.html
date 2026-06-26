@@ -66,15 +66,20 @@
     // 💡 토양 성분 컬럼명과 그에 맞는 단위/설명을 적어주세요!
     // ===============================================================
     const soilColumns = [
-        { name: "pH", unit: "(1:5 H2O)" },
+        { name: "pH", unit: "(1:5)" },
         { name: "OM", unit: "(g/kg)" },
-        { name: "P", unit: "(mg/kg)" },
+        { name: "P2O5", unit: "(mg/kg)" },
         { name: "K", unit: "(cmolc/kg)" },
         { name: "Ca", unit: "(cmolc/kg)" },
         { name: "Mg", unit: "(cmolc/kg)" },
+        { name: "EC", unit: "(dS/m)" },
+        { name: "SiO₂", unit: "(mg/kg)" },
         { name: "Sand", unit: "(%)" },
         { name: "Silt", unit: "(%)" },
-        { name: "Clay", unit: "(%)" }
+        { name: "Clay", unit: "(%)" },
+        { name: "Total-N", unit: "(%)" },
+        { name: "Soil texture", unit: "Soil texture" },
+        { name: "CEC", unit: "(cmolc/kg)" }
     ];
 
     const fileInput = document.getElementById('fileInput');
